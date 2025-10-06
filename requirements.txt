@@ -1,0 +1,7 @@
+datasets
+requests
+chromadb
+sentence-transformers
+langchain-text-splitters
+typing
+tqdm
