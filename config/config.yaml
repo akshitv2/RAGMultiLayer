@@ -1,0 +1,4 @@
+hello: world
+dataset:
+  dir: /mnt/85e3eeea-3bda-4255-95a1-833fffd20e34/datasets
+  max_articles: 100
