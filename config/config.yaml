@@ -1,4 +1,22 @@
 hello: world
 dataset:
   dir: /mnt/85e3eeea-3bda-4255-95a1-833fffd20e34/datasets
-  max_articles: 100
+  max_articles: 5000
+db:
+  config:
+    path:
+  collections:
+    collection_small:
+      name: wiki_small_chunks
+    collection_large:
+      name: wiki_large_chunks
+#chunking:
+#  chunk_config_large:
+#    chunk_size: 1500
+#    chunk_overlap: 150
+#    separators: "\n\n", "\n", " ", ""
+#  chunk_config_small:
+#    chunk_size: 400
+#    chunk_overlap: 50
+#    separators: "\n\n", "\n", " ", ""
+
