@@ -1,8 +1,16 @@
 hello: world
+mode:
+  prepare_data: true
+embedding_model: all-MiniLM-L6-v2
 dataset:
   dir: /mnt/85e3eeea-3bda-4255-95a1-833fffd20e34/datasets
   max_articles: 5000
 db:
+  qdrant:
+    connection:
+      host: localhost
+      port: 6333
+      timeout: 15
   config:
     path:
   collections:
@@ -10,6 +18,8 @@ db:
       name: wiki_small_chunks
     collection_large:
       name: wiki_large_chunks
+  insertion:
+    batch_size: 50
 #chunking:
 #  chunk_config_large:
 #    chunk_size: 1500

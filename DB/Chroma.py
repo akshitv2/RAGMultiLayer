@@ -11,6 +11,7 @@ def run_db():
 
 def delete_existing_collections():
     db_path = os.path.join(os.getcwd(), "vector_db")
+    print(f"Deleting all existing collections at f{db_path}")
 
     for filename in os.listdir(db_path):
         file_path = os.path.join(db_path, filename)
@@ -19,15 +20,7 @@ def delete_existing_collections():
         elif os.path.isdir(file_path):
             shutil.rmtree(file_path)
 
-def create_collection(client, collection_name, embedding_function):
-    collection = client.get_or_create_collection(
-        name=collection_name,
-        embedding_function=embedding_function  # Crucial for search!
-    )
-    return collection
-
-
-def create_collectionx(client, collection_name):
+def create_collection(client, collection_name):
     collection = client.get_or_create_collection(
         name=collection_name
     )

@@ -8,3 +8,5 @@ typing
 tqdm
 spacy
 torch
+ipywidgets
+qdrant-client
