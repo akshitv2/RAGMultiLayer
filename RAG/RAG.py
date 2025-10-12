@@ -91,7 +91,7 @@ def point_construct_from_dict(entries:dict, dense_embedding_model: SentenceTrans
         )
     return result_array
 
-async def insertIntoDb(async_client, small_data, large_data):
+async def insert_into_db(async_client, small_data, large_data):
     await async_client.upsert(
         collection_name="wiki_small_chunks",
         points=small_data
@@ -140,7 +140,7 @@ def rag_parallel(config_yaml, qdrant_client: QdrantClient):
             current_doc_large_data.extend(large_data)
 
             if doc_count % batch_size == 0:
-                asyncio.run(insertIntoDb(async_client, current_doc_small_data, current_doc_large_data))
+                asyncio.run(insert_into_db(async_client, current_doc_small_data, current_doc_large_data))
                 current_doc_small_data = []
                 current_doc_large_data = []
 
