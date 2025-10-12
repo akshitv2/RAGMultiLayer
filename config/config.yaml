@@ -19,7 +19,7 @@ db:
     collection_large:
       name: wiki_large_chunks
   insertion:
-    batch_size: 25
+    batch_size: 15
 chunking:
   chunk_config_large:
     chunk_size: 1500

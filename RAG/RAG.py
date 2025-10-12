@@ -1,20 +1,19 @@
+import asyncio
 import os
-import re
 import uuid
 from itertools import islice
 from multiprocessing import Pool
 
-import spacy
 from datasets import load_dataset
+from fastembed import SparseTextEmbedding
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from pyarrow import dense_union
 from qdrant_client import QdrantClient, models
 from qdrant_client.http.models import PointStruct
-from tqdm import tqdm
 from sentence_transformers import SentenceTransformer
-from fastembed import TextEmbedding, SparseTextEmbedding
+from tqdm import tqdm
 
-from DB.qDrant import create_collection_with_embeddings, create_collection_without_embeddings
+from DB.qDrant import create_collection_with_embeddings, create_collection_without_embeddings, get_async_client, \
+    QdrantConfig
 
 
 def get_splitter(use_large: bool = False):
@@ -47,7 +46,7 @@ def process_document(document_and_index):
     large_splitter = get_splitter(use_large=True)
     small_splitter = get_splitter(use_large=False)
 
-    doc_small_data = []
+    doc_small_data = {"ids":[], "parent_ids":[], "texts":[]}
     doc_large_data = []
 
     text_to_split = document['text']
@@ -64,30 +63,43 @@ def process_document(document_and_index):
         small_chunks = small_splitter.create_documents([l_chunk.page_content])
         for s_chunk in small_chunks:
             child_id = str(uuid.uuid4())
-            doc_small_data.append({"id": child_id, "text": s_chunk.page_content, "parent_id": parent_id})
+            doc_small_data["ids"].append(child_id)
+            doc_small_data["texts"].append(s_chunk.page_content)
+            doc_small_data["parent_ids"].append(parent_id)
     return doc_small_data, doc_large_data
 
-
-def point_construct_from_dict(entry, dense_embedding_model: SentenceTransformer, sparse_model):
-    dense_emb = dense_embedding_model.encode(entry["text"])
-    sparse_emb = list(sparse_model.embed(entry["text"]))
-    return PointStruct(
-        id=entry["id"],
-        # vector=embedding_model.encode(entry["text"]),
-        vector={
-            "dense": dense_emb.tolist(),  # Dense vector
-            "sparse": models.SparseVector(
-                indices=sparse_emb[0].indices.tolist(),  # Term indices
-                values=sparse_emb[0].values.tolist()  # Term weights
+def point_construct_from_dict(entries:dict, dense_embedding_model: SentenceTransformer, sparse_model):
+    result_array = []
+    dense_embeddings = dense_embedding_model.encode(entries["texts"], batch_size=128)
+    sparse_embeddings = sparse_model.embed(entries["texts"])
+    for child_id, parent_id, text, dense_emb, sparse_emb in zip(entries["ids"], entries["parent_ids"], entries["texts"], dense_embeddings, sparse_embeddings):
+        result_array.append(
+            PointStruct(
+                id=child_id,
+                vector={
+                    "dense": dense_emb.tolist(),  # Dense vector
+                    "sparse": models.SparseVector(
+                        indices=sparse_emb.indices.tolist(),  # Term indices
+                        values=sparse_emb.values.tolist()  # Term weights
+                    )
+                },
+                payload={
+                    "parent_id": parent_id,
+                    "text": text
+                }
             )
-        },
-        payload={
-            "parent_id": entry["parent_id"],
-            "text": entry["text"]
-        }
+        )
+    return result_array
+
+async def insertIntoDb(async_client, small_data, large_data):
+    await async_client.upsert(
+        collection_name="wiki_small_chunks",
+        points=small_data
     )
-
-
+    await async_client.upsert(
+        collection_name="wiki_large_chunks",
+        points=large_data
+    )
 def rag_parallel(config_yaml, qdrant_client: QdrantClient):
     small_collection_name = config_yaml['db']['collections']['collection_small']['name']
     large_collection_name = config_yaml['db']['collections']['collection_large']['name']
@@ -111,10 +123,11 @@ def rag_parallel(config_yaml, qdrant_client: QdrantClient):
     dense_embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device="cuda")
     sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
 
+    async_client = get_async_client(QdrantConfig())
     # Using multiprocessing pool to process documents in parallel
     with Pool(processes=num_processes) as pool:
         # map() applies the function to all elements and returns results in order
-        results_iterator = pool.imap(process_document, limited_iterable, chunksize=50)  # Use imap for memory efficiency
+        results_iterator = pool.imap(process_document, limited_iterable, chunksize=500)  # Use imap for memory efficiency
 
         current_doc_small_data = []
         current_doc_large_data = []
@@ -123,20 +136,11 @@ def rag_parallel(config_yaml, qdrant_client: QdrantClient):
         for small_data, large_data in tqdm(results_iterator, total=max_articles, desc="Processing Articles"):
             doc_count += 1
 
-            current_doc_small_data += [
-                point_construct_from_dict(x, dense_embedding_model=dense_embedding_model, sparse_model=sparse_model)
-                for x in small_data]
-            current_doc_large_data += large_data
+            current_doc_small_data.extend(point_construct_from_dict(small_data, dense_embedding_model=dense_embedding_model, sparse_model=sparse_model))
+            current_doc_large_data.extend(large_data)
 
             if doc_count % batch_size == 0:
-                qdrant_client.upsert(
-                    collection_name=small_collection_name,
-                    points=current_doc_small_data
-                )
-                qdrant_client.upsert(
-                    collection_name=large_collection_name,
-                    points=current_doc_large_data
-                )
+                asyncio.run(insertIntoDb(async_client, current_doc_small_data, current_doc_large_data))
                 current_doc_small_data = []
                 current_doc_large_data = []
 

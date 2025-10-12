@@ -1,4 +1,4 @@
-from qdrant_client import QdrantClient, models
+from qdrant_client import QdrantClient, models, AsyncQdrantClient
 from qdrant_client.http.exceptions import UnexpectedResponse
 from qdrant_client.http.models import VectorParams, PointStruct
 
@@ -6,7 +6,7 @@ from qdrant_client.http.models import VectorParams, PointStruct
 class QdrantConfig:
     host = "localhost"
     port = 6333
-    timeout = 5
+    timeout = 15
 
     def __init__(self, host="localhost", port=6333, timeout=5):
         self.host = host
@@ -69,3 +69,6 @@ def create_collection_without_embeddings(client: QdrantClient, collection_name):
         collection_name=collection_name,
         vectors_config=VectorParams(size=2, distance="Cosine")  # size = embedding dim
     )
+
+def get_async_client(qdrantConfig:QdrantConfig):
+    return AsyncQdrantClient(host = qdrantConfig.host, port = qdrantConfig.port, timeout=qdrantConfig.timeout)
