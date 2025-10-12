@@ -6,7 +6,7 @@ from sentence_transformers import SentenceTransformer
 from RAG.RAG_Retrieve import custom_embed_function
 
 
-def dense_query_search(client: QdrantClient, query_text: str, number_of_results: int = 5, print_results:bool=False):
+def dense_query_search(client: QdrantClient, query_text: str, number_of_results: int = 5, print_results: bool = False):
     print(f"\n--- : Querying Small Chunks for: '{query_text}' ---")
     dense_embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device="cpu")
 
@@ -21,10 +21,11 @@ def dense_query_search(client: QdrantClient, query_text: str, number_of_results:
         with_payload=True
     )
     if print_results:
-        [print(point.payload["text"].replace("\n"," ")) for point in results.points]
+        [print(point.payload["text"].replace("\n", " ")) for point in results.points]
     return results
 
-def sparse_query_search(client: QdrantClient, query_text: str, number_of_results: int = 5, print_results:bool=False):
+
+def sparse_query_search(client: QdrantClient, query_text: str, number_of_results: int = 5, print_results: bool = False):
     print(f"\n--- : Querying Small Chunks for: '{query_text}' ---")
     sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
     query_vector = list(sparse_model.embed([query_text]))[0]
@@ -40,10 +41,11 @@ def sparse_query_search(client: QdrantClient, query_text: str, number_of_results
     )
 
     if print_results:
-        [print(point.payload["text"].replace("\n"," ")) for point in results.points]
+        [print(point.payload["text"].replace("\n", " ")) for point in results.points]
     return results
 
-def get_topics_list(client: QdrantClient, num_topics:int = 10):
+
+def get_topics_list(client: QdrantClient, num_topics: int = 10):
     result = client.scroll(
         collection_name="wiki_large_chunks",
         limit=num_topics,
@@ -52,3 +54,20 @@ def get_topics_list(client: QdrantClient, num_topics:int = 10):
     )
     for point in result[0]:
         print(point.id, point.payload["title"])
+
+
+def hierarchical_search(client: QdrantClient, query_text: str, use_deep_embedding: bool = True,
+                        number_of_results: int = 5, print_results: bool = False):
+    if use_deep_embedding:
+        child_results = dense_query_search(client, query_text, print_results=False)
+    else:
+        child_results = sparse_query_search(client, query_text, print_results=False)
+    parent_ids = [point.payload["parent_id"] for point in child_results.points]
+    results = client.retrieve(
+        collection_name="wiki_large_chunks",
+        ids=parent_ids,
+        with_payload=True
+    )
+    if print_results:
+        [print(point.payload["text"].replace("\n", " ")) for point in results]
+    return results
