@@ -1,19 +1,21 @@
-from qdrant_client import QdrantClient
+from qdrant_client import QdrantClient, models
 from qdrant_client.http.exceptions import UnexpectedResponse
 from qdrant_client.http.models import VectorParams, PointStruct
+
 
 class QdrantConfig:
     host = "localhost"
     port = 6333
     timeout = 5
 
-    def __init__(self, host = "localhost",    port = 6333,    timeout = 5):
+    def __init__(self, host="localhost", port=6333, timeout=5):
         self.host = host
         self.port = port
         self.timeout = timeout
 
     def get_config(self):
         return [self.host, self.port, self.timeout]
+
 
 def check_qdrant_status(config: QdrantConfig):
     host, port, timeout = config.get_config()
@@ -32,6 +34,7 @@ def check_qdrant_status(config: QdrantConfig):
         print("Unexpected error:", e)
         return False, None
 
+
 def delete_all_existing_collections(config: QdrantConfig):
     host, port, timeout = config.get_config()
     client = QdrantClient(host=host, port=port, timeout=timeout)
@@ -44,8 +47,25 @@ def delete_all_existing_collections(config: QdrantConfig):
 
     print("All collections deleted.")
 
-def create_collection(client: QdrantClient, collection_name):
-    client.recreate_collection(
+
+def create_collection_with_embeddings(client: QdrantClient, collection_name):
+    client.create_collection(
         collection_name=collection_name,
-        vectors_config=VectorParams(size=384, distance="Cosine")  # size = embedding dim
+        vectors_config={
+            "dense": models.VectorParams(
+                size=384,  # Size of dense embeddings from all-MiniLM-L6-v2
+                distance=models.Distance.COSINE
+            )
+        },
+        sparse_vectors_config={
+            "sparse": models.SparseVectorParams(
+                modifier="idf"  # Enable IDF for sparse vectors
+            )
+        }
+    )
+
+def create_collection_without_embeddings(client: QdrantClient, collection_name):
+    client.create_collection(
+        collection_name=collection_name,
+        vectors_config=VectorParams(size=2, distance="Cosine")  # size = embedding dim
     )

@@ -7,12 +7,15 @@ from multiprocessing import Pool
 import spacy
 from datasets import load_dataset
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from qdrant_client import QdrantClient
+from pyarrow import dense_union
+from qdrant_client import QdrantClient, models
 from qdrant_client.http.models import PointStruct
 from tqdm import tqdm
 from sentence_transformers import SentenceTransformer
+from fastembed import TextEmbedding, SparseTextEmbedding
 
-from DB.qDrant import create_collection
+from DB.qDrant import create_collection_with_embeddings, create_collection_without_embeddings
+
 
 def get_splitter(use_large: bool = False):
     if use_large:
@@ -54,39 +57,50 @@ def process_document(document_and_index):
     large_chunks = large_splitter.create_documents([text_to_split])
     for l_chunk in large_chunks:
         parent_id = str(uuid.uuid4())
-        # doc_large_data["metadatas"].append(l_chunk.metadata)
-        doc_large_data.append(PointStruct(id = parent_id, vector=[0.0] * 384, payload={"text": l_chunk.page_content, "title": doc_title}))
-        # 3. Small chunks (Children)
+        doc_large_data.append(
+            PointStruct(id=parent_id,
+                        vector=[0.0] * 2,
+                        payload={"text": l_chunk.page_content, "title": doc_title}))
         small_chunks = small_splitter.create_documents([l_chunk.page_content])
         for s_chunk in small_chunks:
             child_id = str(uuid.uuid4())
-
-            doc_small_data.append(PointStruct(id=child_id, vector=[0.0] *384,
-                                              payload={"text": s_chunk.page_content, "parent_id": parent_id}))
-            # s_chunk.metadata["doc_index"] = doc_index  # Add original doc index for context
-            # doc_small_data["ids"].append(child_id)
-            # doc_small_data["documents"].append(s_chunk.page_content)
-            # doc_small_data["metadatas"].append(s_chunk.metadata)
+            doc_small_data.append({"id": child_id, "text": s_chunk.page_content, "parent_id": parent_id})
     return doc_small_data, doc_large_data
 
 
-def rag_parallel(config_yaml, qdrant_client: QdrantClient):
-    # Load dataset in streaming mode
-    max_articles = 500
-    dataset = load_dataset(path="wikimedia/wikipedia", name="20231101.en", cache_dir=config_yaml["dataset"]["dir"],split=f"train[:{max_articles}]")
-                           # streaming=True)
-    # Get iterable for the training split
-    data_iterable = dataset
+def point_construct_from_dict(entry, dense_embedding_model: SentenceTransformer, sparse_model):
+    dense_emb = dense_embedding_model.encode(entry["text"])
+    sparse_emb = list(sparse_model.embed(entry["text"]))
+    return PointStruct(
+        id=entry["id"],
+        # vector=embedding_model.encode(entry["text"]),
+        vector={
+            "dense": dense_emb.tolist(),  # Dense vector
+            "sparse": models.SparseVector(
+                indices=sparse_emb[0].indices.tolist(),  # Term indices
+                values=sparse_emb[0].values.tolist()  # Term weights
+            )
+        },
+        payload={
+            "parent_id": entry["parent_id"],
+            "text": entry["text"]
+        }
+    )
 
+
+def rag_parallel(config_yaml, qdrant_client: QdrantClient):
     small_collection_name = config_yaml['db']['collections']['collection_small']['name']
     large_collection_name = config_yaml['db']['collections']['collection_large']['name']
-
     # Initialize collections
-    small_collection = create_collection(qdrant_client, small_collection_name)
-    large_collection = create_collection(qdrant_client, large_collection_name)
-
+    create_collection_with_embeddings(qdrant_client, small_collection_name)
+    create_collection_without_embeddings(qdrant_client, large_collection_name)
+    # Load dataset in streaming mode
+    max_articles = config_yaml["dataset"]["max_articles"]
+    dataset = load_dataset(path="wikimedia/wikipedia", name="20231101.en", cache_dir=config_yaml["dataset"]["dir"],
+                           split=f"train[:{max_articles}]")
+    # Get iterable for the training split
+    data_iterable = dataset
     # Configuration
-
     batch_size = config_yaml['db']['insertion']['batch_size']  # Size of the batch to add to Chroma
     num_processes = os.cpu_count() - 1 if os.cpu_count() > 1 else 1  # Use N-1 cores
 
@@ -94,7 +108,8 @@ def rag_parallel(config_yaml, qdrant_client: QdrantClient):
 
     # islice limits the number of articles processed
     limited_iterable = islice(enumerate(data_iterable), max_articles)
-    embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device="cpu")
+    dense_embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device="cuda")
+    sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
 
     # Using multiprocessing pool to process documents in parallel
     with Pool(processes=num_processes) as pool:
@@ -108,8 +123,10 @@ def rag_parallel(config_yaml, qdrant_client: QdrantClient):
         for small_data, large_data in tqdm(results_iterator, total=max_articles, desc="Processing Articles"):
             doc_count += 1
 
-            current_doc_small_data+=small_data
-            current_doc_large_data+=large_data
+            current_doc_small_data += [
+                point_construct_from_dict(x, dense_embedding_model=dense_embedding_model, sparse_model=sparse_model)
+                for x in small_data]
+            current_doc_large_data += large_data
 
             if doc_count % batch_size == 0:
                 qdrant_client.upsert(

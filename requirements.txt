@@ -10,3 +10,4 @@ spacy
 torch
 ipywidgets
 qdrant-client
+fastembed
