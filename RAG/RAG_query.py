@@ -6,7 +6,7 @@ from sentence_transformers import SentenceTransformer
 from RAG.RAG_Retrieve import custom_embed_function
 
 
-def dense_query_search(client: QdrantClient, query_text: str, number_of_results: int = 5, ):
+def dense_query_search(client: QdrantClient, query_text: str, number_of_results: int = 5, print_results:bool=False):
     print(f"\n--- : Querying Small Chunks for: '{query_text}' ---")
     dense_embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device="cpu")
 
@@ -20,6 +20,8 @@ def dense_query_search(client: QdrantClient, query_text: str, number_of_results:
         limit=number_of_results,
         with_payload=True
     )
+    if print_results:
+        [print(point.payload["text"].replace("\n"," ")) for point in results.points]
     return results
 
 def sparse_query_search(client: QdrantClient, query_text: str, number_of_results: int = 5, print_results:bool=False):
@@ -41,11 +43,10 @@ def sparse_query_search(client: QdrantClient, query_text: str, number_of_results
         [print(point.payload["text"].replace("\n"," ")) for point in results.points]
     return results
 
-
-def get_topics_list(client: QdrantClient):
+def get_topics_list(client: QdrantClient, num_topics:int = 10):
     result = client.scroll(
         collection_name="wiki_large_chunks",
-        limit=10,
+        limit=num_topics,
         with_payload=True,
         with_vectors=True
     )

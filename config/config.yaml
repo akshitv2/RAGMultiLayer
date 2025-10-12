@@ -4,7 +4,7 @@ mode:
 embedding_model: all-MiniLM-L6-v2
 dataset:
   dir: /mnt/85e3eeea-3bda-4255-95a1-833fffd20e34/datasets
-  max_articles: 50
+  max_articles: 5000
 db:
   qdrant:
     connection:
