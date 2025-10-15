@@ -15,6 +15,46 @@ from tqdm import tqdm
 from DB.qDrant import create_collection_with_embeddings, create_collection_without_embeddings, get_async_client, \
     QdrantConfig
 
+import re
+import string
+# import nltk
+# from nltk.corpus import stopwords
+# from nltk.stem import WordNetLemmatizer
+#
+# # Download required NLTK data
+# nltk.download('stopwords')
+# nltk.download('wordnet')
+# nltk.download('omw-1.4')
+#
+# stop_words = set(stopwords.words('english'))
+# lemmatizer = WordNetLemmatizer()
+#
+#
+# def clean_wiki_text(text):
+#     # Lowercase
+#     text = text.lower()
+#
+#     # Remove URLs
+#     text = re.sub(r'http\S+|www\S+|https\S+', '', text)
+#
+#     # Remove punctuation
+#     text = text.translate(str.maketrans('', '', string.punctuation))
+#
+#     # Remove numbers
+#     text = re.sub(r'\d+', '', text)
+#
+#     # Remove special characters (anything not letters or spaces)
+#     text = re.sub(r'[^a-z\s]', '', text)
+#
+#     # Remove extra whitespace
+#     text = re.sub(r'\s+', ' ', text).strip()
+#
+#     # Tokenize, remove stopwords, and lemmatize
+#     tokens = [lemmatizer.lemmatize(word) for word in text.split() if word not in stop_words]
+#
+#     # Join back into string
+#     return ' '.join(tokens)
+
 
 def get_splitter(use_large: bool = False):
     if use_large:
@@ -46,7 +86,7 @@ def process_document(document_and_index):
     large_splitter = get_splitter(use_large=True)
     small_splitter = get_splitter(use_large=False)
 
-    doc_small_data = {"ids":[], "parent_ids":[], "texts":[]}
+    doc_small_data = {"ids":[], "parent_ids":[], "texts":[], "titles":[]}
     doc_large_data = []
 
     text_to_split = document['text']
@@ -66,13 +106,14 @@ def process_document(document_and_index):
             doc_small_data["ids"].append(child_id)
             doc_small_data["texts"].append(s_chunk.page_content)
             doc_small_data["parent_ids"].append(parent_id)
+            doc_small_data["titles"].append(doc_title)
     return doc_small_data, doc_large_data
 
 def point_construct_from_dict(entries:dict, dense_embedding_model: SentenceTransformer, sparse_model):
     result_array = []
     dense_embeddings = dense_embedding_model.encode(entries["texts"], batch_size=128)
     sparse_embeddings = sparse_model.embed(entries["texts"])
-    for child_id, parent_id, text, dense_emb, sparse_emb in zip(entries["ids"], entries["parent_ids"], entries["texts"], dense_embeddings, sparse_embeddings):
+    for child_id, parent_id, text,doc_title, dense_emb, sparse_emb in zip(entries["ids"], entries["parent_ids"], entries["texts"],entries["titles"], dense_embeddings, sparse_embeddings):
         result_array.append(
             PointStruct(
                 id=child_id,
@@ -85,7 +126,8 @@ def point_construct_from_dict(entries:dict, dense_embedding_model: SentenceTrans
                 },
                 payload={
                     "parent_id": parent_id,
-                    "text": text
+                    "text": text,
+                    "title":doc_title
                 }
             )
         )
