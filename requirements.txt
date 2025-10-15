@@ -11,3 +11,4 @@ torch
 ipywidgets
 qdrant-client
 fastembed
+nltk

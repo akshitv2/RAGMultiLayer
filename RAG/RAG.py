@@ -17,43 +17,43 @@ from DB.qDrant import create_collection_with_embeddings, create_collection_witho
 
 import re
 import string
-# import nltk
-# from nltk.corpus import stopwords
-# from nltk.stem import WordNetLemmatizer
-#
-# # Download required NLTK data
-# nltk.download('stopwords')
-# nltk.download('wordnet')
-# nltk.download('omw-1.4')
-#
-# stop_words = set(stopwords.words('english'))
-# lemmatizer = WordNetLemmatizer()
-#
-#
-# def clean_wiki_text(text):
-#     # Lowercase
-#     text = text.lower()
-#
-#     # Remove URLs
-#     text = re.sub(r'http\S+|www\S+|https\S+', '', text)
-#
-#     # Remove punctuation
-#     text = text.translate(str.maketrans('', '', string.punctuation))
-#
-#     # Remove numbers
-#     text = re.sub(r'\d+', '', text)
-#
-#     # Remove special characters (anything not letters or spaces)
-#     text = re.sub(r'[^a-z\s]', '', text)
-#
-#     # Remove extra whitespace
-#     text = re.sub(r'\s+', ' ', text).strip()
-#
-#     # Tokenize, remove stopwords, and lemmatize
-#     tokens = [lemmatizer.lemmatize(word) for word in text.split() if word not in stop_words]
-#
-#     # Join back into string
-#     return ' '.join(tokens)
+import nltk
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
+
+# Download required NLTK data
+nltk.download('stopwords')
+nltk.download('wordnet')
+nltk.download('omw-1.4')
+
+stop_words = set(stopwords.words('english'))
+lemmatizer = WordNetLemmatizer()
+
+
+def clean_wiki_text(text):
+    # Lowercase
+    text = text.lower()
+
+    # Remove URLs
+    text = re.sub(r'http\S+|www\S+|https\S+', '', text)
+
+    # Remove punctuation
+    text = text.translate(str.maketrans('', '', string.punctuation))
+
+    # Remove numbers
+    text = re.sub(r'\d+', '', text)
+
+    # Remove special characters (anything not letters or spaces)
+    text = re.sub(r'[^a-z\s]', '', text)
+
+    # Remove extra whitespace
+    text = re.sub(r'\s+', ' ', text).strip()
+
+    # Tokenize, remove stopwords, and lemmatize
+    tokens = [lemmatizer.lemmatize(word) for word in text.split() if word not in stop_words]
+
+    # Join back into string
+    return ' '.join(tokens)
 
 
 def get_splitter(use_large: bool = False):
